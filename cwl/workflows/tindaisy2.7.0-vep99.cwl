@@ -1,7 +1,8 @@
 class: Workflow
 cwlVersion: v1.0
-id: tindaisy2.6_ffpe
-label: TinDaisy2.6-FFPE
+id: tindaisy2_7_0_vep99
+doc: TinDaisy 2.7.0 workflow with VEP v99 annotation
+label: TinDaisy2.7.0-vep99
 inputs:
   - id: tumor_bam
     type: File
@@ -13,8 +14,6 @@ inputs:
     type: File
   - id: varscan_config
     type: File
-  - id: assembly
-    type: string?
   - id: centromere_bed
     type: File?
   - id: strelka_config
@@ -37,8 +36,6 @@ inputs:
     type: File?
   - id: vep_cache_gz
     type: File?
-  - id: vep_cache_version
-    type: string?
   - id: rescue_cosmic
     type: boolean?
   - id: rescue_clinvar
@@ -46,9 +43,6 @@ inputs:
   - id: bypass_classification
     type: boolean?
     doc: Bypass classification filter
-  - id: bypass_ffpe
-    type: boolean?
-    doc: Pass VCF through FFPE filter but do not exclude any calls
 outputs:
   - id: output_maf_clean
     outputSource:
@@ -62,6 +56,10 @@ outputs:
     outputSource:
       snp_indel_proximity_filter/output
     type: File
+  - id: warning_flag
+    outputSource:
+      vep_qc/warning_flag
+    type: File?
 steps:
   - id: run_pindel
     in:
@@ -180,7 +178,7 @@ steps:
       - id: ref-fasta
         source: reference_fasta
       - id: assembly
-        source: assembly
+        default: GRCh38
       - id: input-vcf
         source: canonical_filter/output
       - id: tumor_barcode
@@ -190,7 +188,7 @@ steps:
     out:
       - id: output
     run: ../../submodules/vcf2maf-CWL/cwl/vcf2maf.cwl
-    label: vcf2maf
+    label: vcf2maf-GRCh38
   - id: varscan_indel_vcf_remap
     in:
       - id: input
@@ -224,7 +222,7 @@ steps:
   - id: snp_indel_proximity_filter
     in:
       - id: input
-        source: ffpe_filter/output
+        source: dbsnp_filter/output
       - id: distance
         default: 5
     out:
@@ -543,18 +541,14 @@ steps:
         source: mnp_filter/filtered_VCF
       - id: reference_fasta
         source: reference_fasta
-      - id: assembly
-        source: assembly
-      - id: vep_cache_version
-        source: vep_cache_version
       - id: vep_cache_gz
         source: vep_cache_gz
       - id: custom_filename
         source: clinvar_annotation
     out:
       - id: output_dat
-    run: ../../submodules/VEP_annotate/cwl/vep_annotate.TinDaisy.cwl
-    label: vep_annotate TinDaisy
+    run: ../../submodules/VEP_annotate/cwl/vep_annotate.TinDaisy.v99.cwl
+    label: vep_annotate v99 TinDaisy
   - id: stage_normal_bam
     in:
       - id: BAM
@@ -571,18 +565,18 @@ steps:
       - id: output
     run: ../tools/stage_bam.cwl
     label: stage_tumor_bam
-  - id: ffpe_filter
+  - id: vep_qc
     in:
+      - id: num_expected
+        default: 23
+      - id: exit_on_mismatch
+        default: true
       - id: VCF
-        source: dbsnp_filter/output
-      - id: tumor_BAM
-        source: stage_tumor_bam/output
-      - id: bypass
-        default: false
-        source: bypass_ffpe
+        source: snp_indel_proximity_filter/output
+      - id: workflow_file_dependency
+        source: vcf2maf/output
     out:
-      - id: output
-    run: ../../submodules/FFPE_Filter/cwl/ffpe_filter.cwl
-    label: FFPE_Filter
-requirements:
-  - class: SubworkflowFeatureRequirement
+      - id: warning_flag
+    run: ../../submodules/VEP_QC/cwl/vep_qc.cwl
+    label: VEP_QC
+requirements: []
